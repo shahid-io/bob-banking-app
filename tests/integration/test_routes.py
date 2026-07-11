@@ -1,11 +1,20 @@
 """
 tests/integration/test_routes.py
 
-Integration tests for all Flask routes.
+Integration tests for all Flask routes.  Tests exercise the full HTTP stack —
+routes, session management, service layer, and database — using Flask's
+built-in test client.
+
+All 9 scenarios from the implementation guide are covered, plus additional
+edge cases for robustness.
 """
 
 import json
 
+
+# ---------------------------------------------------------------------------
+# Authentication routes
+# ---------------------------------------------------------------------------
 
 class TestLogin:
     def test_get_login_returns_html_page(self, client):
@@ -14,107 +23,236 @@ class TestLogin:
         assert b"SecureBank" in res.data or b"login" in res.data.lower()
 
     def test_post_valid_credentials_returns_200(self, client):
-        res = client.post("/login", data=json.dumps({"username": "alice", "password": "password123"}), content_type="application/json")
+        res = client.post(
+            "/login",
+            data=json.dumps({"username": "alice", "password": "password123"}),
+            content_type="application/json",
+        )
         assert res.status_code == 200
 
     def test_post_valid_credentials_sets_session(self, client):
-        client.post("/login", data=json.dumps({"username": "alice", "password": "password123"}), content_type="application/json")
-        assert client.get("/balance").status_code == 200
+        client.post(
+            "/login",
+            data=json.dumps({"username": "alice", "password": "password123"}),
+            content_type="application/json",
+        )
+        # After login, /balance should be accessible (session cookie retained)
+        res = client.get("/balance")
+        assert res.status_code == 200
 
     def test_post_invalid_password_returns_401(self, client):
-        res = client.post("/login", data=json.dumps({"username": "alice", "password": "wrong"}), content_type="application/json")
+        res = client.post(
+            "/login",
+            data=json.dumps({"username": "alice", "password": "wrong"}),
+            content_type="application/json",
+        )
         assert res.status_code == 401
 
     def test_post_unknown_username_returns_401(self, client):
-        res = client.post("/login", data=json.dumps({"username": "nobody", "password": "password123"}), content_type="application/json")
+        res = client.post(
+            "/login",
+            data=json.dumps({"username": "nobody", "password": "password123"}),
+            content_type="application/json",
+        )
         assert res.status_code == 401
 
     def test_post_invalid_credentials_error_shape(self, client):
-        res = client.post("/login", data=json.dumps({"username": "alice", "password": "wrong"}), content_type="application/json")
-        assert "error" in json.loads(res.data)
+        res = client.post(
+            "/login",
+            data=json.dumps({"username": "alice", "password": "wrong"}),
+            content_type="application/json",
+        )
+        data = json.loads(res.data)
+        assert "error" in data
 
     def test_post_empty_body_returns_401(self, client):
-        res = client.post("/login", data=json.dumps({}), content_type="application/json")
+        res = client.post(
+            "/login",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
         assert res.status_code == 401
 
 
 class TestLogout:
     def test_logout_clears_session(self, auth_client):
+        # Verify authenticated before logout
         assert auth_client.get("/balance").status_code == 200
-        auth_client.get("/logout")
-        assert auth_client.get("/balance").status_code == 401
 
+        # Logout
+        auth_client.get("/logout")
+
+        # /balance must now return 401 after logout
+        res = auth_client.get("/balance")
+        assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Balance route
+# ---------------------------------------------------------------------------
 
 class TestBalance:
     def test_authenticated_request_returns_200(self, auth_client):
-        assert auth_client.get("/balance").status_code == 200
+        res = auth_client.get("/balance")
+        assert res.status_code == 200
 
     def test_unauthenticated_request_returns_401(self, client):
-        assert client.get("/balance").status_code == 401
+        res = client.get("/balance")
+        assert res.status_code == 401
 
     def test_response_contains_numeric_balance(self, auth_client):
-        data = json.loads(auth_client.get("/balance").data)
+        res = auth_client.get("/balance")
+        data = json.loads(res.data)
         assert "balance" in data
-        assert data["balance"] == 1000.00
+        assert isinstance(data["balance"], (int, float))
+        assert data["balance"] == 1000.00  # Alice's seeded balance
 
     def test_response_contains_username(self, auth_client):
-        assert "username" in json.loads(auth_client.get("/balance").data)
+        res = auth_client.get("/balance")
+        data = json.loads(res.data)
+        assert "username" in data
 
+
+# ---------------------------------------------------------------------------
+# Deposit route
+# ---------------------------------------------------------------------------
 
 class TestDeposit:
     def test_valid_deposit_returns_200(self, auth_client):
-        res = auth_client.post("/deposit", data=json.dumps({"amount": 500}), content_type="application/json")
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": 500}),
+            content_type="application/json",
+        )
         assert res.status_code == 200
 
     def test_valid_deposit_returns_correct_new_balance(self, auth_client):
-        data = json.loads(auth_client.post("/deposit", data=json.dumps({"amount": 500}), content_type="application/json").data)
-        assert data["balance"] == 1500.00
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": 500}),
+            content_type="application/json",
+        )
+        data = json.loads(res.data)
+        assert data["balance"] == 1500.00  # 1000 + 500
 
     def test_zero_amount_returns_400(self, auth_client):
-        assert auth_client.post("/deposit", data=json.dumps({"amount": 0}), content_type="application/json").status_code == 400
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": 0}),
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_negative_amount_returns_400(self, auth_client):
-        assert auth_client.post("/deposit", data=json.dumps({"amount": -100}), content_type="application/json").status_code == 400
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": -100}),
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_non_numeric_amount_returns_400(self, auth_client):
-        assert auth_client.post("/deposit", data=json.dumps({"amount": "abc"}), content_type="application/json").status_code == 400
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": "abc"}),
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_unauthenticated_deposit_returns_401(self, client):
-        assert client.post("/deposit", data=json.dumps({"amount": 100}), content_type="application/json").status_code == 401
+        res = client.post(
+            "/deposit",
+            data=json.dumps({"amount": 100}),
+            content_type="application/json",
+        )
+        assert res.status_code == 401
 
     def test_error_response_shape(self, auth_client):
-        res = auth_client.post("/deposit", data=json.dumps({"amount": -1}), content_type="application/json")
-        assert "error" in json.loads(res.data)
+        res = auth_client.post(
+            "/deposit",
+            data=json.dumps({"amount": -1}),
+            content_type="application/json",
+        )
+        data = json.loads(res.data)
+        assert "error" in data
 
+
+# ---------------------------------------------------------------------------
+# Withdraw route
+# ---------------------------------------------------------------------------
 
 class TestWithdraw:
     def test_valid_withdrawal_returns_200(self, auth_client):
-        assert auth_client.post("/withdraw", data=json.dumps({"amount": 200}), content_type="application/json").status_code == 200
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 200}),
+            content_type="application/json",
+        )
+        assert res.status_code == 200
 
     def test_valid_withdrawal_returns_correct_new_balance(self, auth_client):
-        data = json.loads(auth_client.post("/withdraw", data=json.dumps({"amount": 200}), content_type="application/json").data)
-        assert data["balance"] == 800.00
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 200}),
+            content_type="application/json",
+        )
+        data = json.loads(res.data)
+        assert data["balance"] == 800.00  # 1000 - 200
 
     def test_exceeding_balance_returns_422(self, auth_client):
-        assert auth_client.post("/withdraw", data=json.dumps({"amount": 9999}), content_type="application/json").status_code == 422
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 9999}),
+            content_type="application/json",
+        )
+        assert res.status_code == 422
 
     def test_exceeding_balance_error_message(self, auth_client):
-        data = json.loads(auth_client.post("/withdraw", data=json.dumps({"amount": 9999}), content_type="application/json").data)
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 9999}),
+            content_type="application/json",
+        )
+        data = json.loads(res.data)
         assert data["error"] == "Insufficient balance"
 
     def test_zero_amount_returns_400(self, auth_client):
-        assert auth_client.post("/withdraw", data=json.dumps({"amount": 0}), content_type="application/json").status_code == 400
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 0}),
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_negative_amount_returns_400(self, auth_client):
-        assert auth_client.post("/withdraw", data=json.dumps({"amount": -50}), content_type="application/json").status_code == 400
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": -50}),
+            content_type="application/json",
+        )
+        assert res.status_code == 400
 
     def test_unauthenticated_withdrawal_returns_401(self, client):
-        assert client.post("/withdraw", data=json.dumps({"amount": 100}), content_type="application/json").status_code == 401
+        res = client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 100}),
+            content_type="application/json",
+        )
+        assert res.status_code == 401
 
     def test_session_cleared_after_logout_blocks_withdraw(self, auth_client):
         auth_client.get("/logout")
-        assert auth_client.post("/withdraw", data=json.dumps({"amount": 50}), content_type="application/json").status_code == 401
+        res = auth_client.post(
+            "/withdraw",
+            data=json.dumps({"amount": 50}),
+            content_type="application/json",
+        )
+        assert res.status_code == 401
 
+
+# ---------------------------------------------------------------------------
+# Page routes (GET)
+# ---------------------------------------------------------------------------
 
 class TestPageRoutes:
     def test_root_redirects_to_login(self, client):
@@ -123,7 +261,8 @@ class TestPageRoutes:
         assert "/login" in res.headers.get("Location", "")
 
     def test_dashboard_unauthenticated_redirects_to_login(self, client):
-        assert client.get("/dashboard").status_code == 302
+        res = client.get("/dashboard")
+        assert res.status_code == 302
 
     def test_dashboard_authenticated_returns_html(self, auth_client):
         res = auth_client.get("/dashboard")
@@ -131,10 +270,12 @@ class TestPageRoutes:
         assert b"SecureBank" in res.data
 
     def test_deposit_page_unauthenticated_redirects(self, client):
-        assert client.get("/deposit").status_code == 302
+        res = client.get("/deposit")
+        assert res.status_code == 302
 
     def test_withdraw_page_unauthenticated_redirects(self, client):
-        assert client.get("/withdraw").status_code == 302
+        res = client.get("/withdraw")
+        assert res.status_code == 302
 
     def test_deposit_page_authenticated_returns_html(self, auth_client):
         res = auth_client.get("/deposit")

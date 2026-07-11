@@ -1,7 +1,8 @@
 """
 tests/unit/test_models.py
 
-Unit tests for the models layer.
+Unit tests for the models layer.  Each test receives a fresh seeded database
+via the db_path fixture defined in conftest.py.
 """
 
 from models import get_customer_by_username, get_balance, update_balance
@@ -23,13 +24,15 @@ class TestGetCustomerByUsername:
         assert get_customer_by_username(db_path, "nobody") is None
 
     def test_case_sensitive_username(self, db_path):
+        # Usernames are stored lowercase; 'Alice' should not match 'alice'
         assert get_customer_by_username(db_path, "Alice") is None
 
 
 class TestGetBalance:
     def test_returns_seeded_balance(self, db_path):
         cust = get_customer_by_username(db_path, "alice")
-        assert get_balance(db_path, cust["id"]) == 1000.00
+        bal = get_balance(db_path, cust["id"])
+        assert bal == 1000.00
 
     def test_different_accounts_have_different_balances(self, db_path):
         alice_id = get_customer_by_username(db_path, "alice")["id"]
@@ -43,13 +46,15 @@ class TestGetBalance:
 class TestUpdateBalance:
     def test_balance_is_updated(self, db_path):
         cust = get_customer_by_username(db_path, "alice")
-        update_balance(db_path, cust["id"], 555.50)
-        assert get_balance(db_path, cust["id"]) == 555.50
+        cid = cust["id"]
+        update_balance(db_path, cid, 555.50)
+        assert get_balance(db_path, cid) == 555.50
 
     def test_balance_can_be_set_to_zero(self, db_path):
         cust = get_customer_by_username(db_path, "alice")
-        update_balance(db_path, cust["id"], 0.0)
-        assert get_balance(db_path, cust["id"]) == 0.0
+        cid = cust["id"]
+        update_balance(db_path, cid, 0.0)
+        assert get_balance(db_path, cid) == 0.0
 
     def test_update_does_not_affect_other_accounts(self, db_path):
         alice_id = get_customer_by_username(db_path, "alice")["id"]

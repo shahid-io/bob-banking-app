@@ -57,23 +57,45 @@ def create_app(
     Returns:
         A configured, ready-to-use Flask application instance.
     """
+    # ------------------------------------------------------------------
+    # Resolve configuration
+    # ------------------------------------------------------------------
     if config is None:
         env_name = os.environ.get("FLASK_ENV", "development")
         config = CONFIG_MAP.get(env_name, DevelopmentConfig)
 
+    # ------------------------------------------------------------------
+    # Create the Flask instance
+    # ------------------------------------------------------------------
+    # static_folder=None because static assets live in FRONTEND/static/
+    # and are served by an explicit /static/<path> route in routes.py.
     flask_app = Flask(__name__, static_folder=None)
     flask_app.config.from_object(config)
 
+    # ------------------------------------------------------------------
+    # Logging
+    # ------------------------------------------------------------------
     _configure_logging(flask_app.config["LOG_LEVEL"])
     logger = logging.getLogger(__name__)
     logger.debug("create_app: config=%s", config.__name__)
 
+    # ------------------------------------------------------------------
+    # Register routes / blueprints
+    # ------------------------------------------------------------------
     from routes import banking_bp  # noqa: PLC0415
+
     flask_app.register_blueprint(banking_bp)
 
+    # ------------------------------------------------------------------
+    # Register error handlers
+    # ------------------------------------------------------------------
     from routes import register_error_handlers  # noqa: PLC0415
+
     register_error_handlers(flask_app)
 
+    # ------------------------------------------------------------------
+    # Initialise the database (idempotent — safe to call on every startup)
+    # ------------------------------------------------------------------
     with flask_app.app_context():
         init_db(flask_app.config["DATABASE"])
 

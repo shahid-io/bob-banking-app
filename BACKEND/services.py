@@ -49,6 +49,10 @@ class ServiceResult:
     name: Optional[str] = field(default=None)
     error: Optional[str] = field(default=None)
 
+    # ------------------------------------------------------------------
+    # Convenience constructors
+    # ------------------------------------------------------------------
+
     @classmethod
     def success(
         cls,
@@ -70,6 +74,13 @@ class ServiceResult:
 
 
 def _validate_amount(raw: object) -> tuple[Optional[float], Optional[str]]:
+    """
+    Coerce *raw* to a positive finite float.
+
+    Returns:
+        (amount, None)   on success.
+        (None, error_msg) on failure.
+    """
     try:
         amount = float(raw)  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -92,8 +103,10 @@ def _validate_amount(raw: object) -> tuple[Optional[float], Optional[str]]:
 def authenticate(db_path: str, username: str, password: str) -> ServiceResult:
     """
     Verify *username* and *password* against the database.
-    Returns ServiceResult with id and name on success.
-    Same error message for unknown username and wrong password (prevents enumeration).
+
+    Returns a ServiceResult with ``id`` and ``name`` on success.
+    The same error message is returned for unknown username *and* wrong
+    password to prevent username enumeration attacks.
     """
     logger.debug("authenticate: username=%s", username)
 
@@ -132,10 +145,17 @@ def fetch_balance(db_path: str, customer_id: int) -> ServiceResult:
 
 
 def process_deposit(db_path: str, customer_id: int, amount: object) -> ServiceResult:
-    """Add *amount* to the balance of *customer_id*."""
+    """
+    Add *amount* to the balance of *customer_id*.
+
+    Server-side validation (see STEP_BY_STEP_IMPLEMENTATION_GUIDE.md §5.3):
+      - amount must coerce to a finite float
+      - amount must be > 0
+    """
     validated, error = _validate_amount(amount)
     if error:
         return ServiceResult.failure(error)
+    # validated is guaranteed non-None here (error is None when validated is set)
     assert validated is not None
 
     current = get_balance(db_path, customer_id)
@@ -159,7 +179,13 @@ def process_deposit(db_path: str, customer_id: int, amount: object) -> ServiceRe
 def process_withdrawal(
     db_path: str, customer_id: int, amount: object
 ) -> ServiceResult:
-    """Subtract *amount* from the balance of *customer_id*."""
+    """
+    Subtract *amount* from the balance of *customer_id*.
+
+    All deposit validation rules apply, plus:
+      - resulting balance must not be negative (checked AFTER reading from DB
+        to prevent race conditions on cached values)
+    """
     validated, error = _validate_amount(amount)
     if error:
         return ServiceResult.failure(error)

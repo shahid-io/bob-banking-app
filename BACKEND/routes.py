@@ -3,7 +3,8 @@ routes.py — URL routing and HTTP layer.
 
 Design rules:
   - All routes are registered on a Flask Blueprint (``banking_bp``).
-  - Routes only handle HTTP concerns: parse input, call a service, return a response.
+  - Routes only handle HTTP concerns: parse input, call a service, return a
+    response.  No business logic lives here.
   - Every protected route calls ``_auth_guard()``, which returns 401 JSON
     (for API routes) or a redirect (for page routes) when the session is absent.
   - All JSON error responses use the shape ``{"error": "message text"}``.
@@ -35,8 +36,23 @@ logger = logging.getLogger(__name__)
 banking_bp = Blueprint("banking", __name__)
 
 
+# ---------------------------------------------------------------------------
+# Security headers — applied to every response from this Blueprint
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.after_request
 def set_security_headers(response):  # type: ignore[return]
+    """
+    Add defensive HTTP headers to every response.
+
+    Notes:
+      - Content-Security-Policy allows Bootstrap CDN and inline scripts
+        (required by the static HTML pages).
+      - X-Frame-Options prevents clickjacking.
+      - X-Content-Type-Options prevents MIME sniffing.
+      - Referrer-Policy limits referrer leakage.
+    """
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -51,29 +67,54 @@ def set_security_headers(response):  # type: ignore[return]
     return response
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
 def _db() -> str:
+    """Return the configured database path from Flask app config."""
     return current_app.config["DATABASE"]  # type: ignore[return-value]
 
 
 def _frontend() -> str:
+    """Return the absolute path to the FRONTEND/ directory."""
     return current_app.config["FRONTEND_DIR"]  # type: ignore[return-value]
 
 
 def _auth_guard_api():
+    """
+    Return a 401 JSON response when the session lacks ``user_id``, else None.
+    Used by JSON API endpoints.
+    """
     if not session.get("user_id"):
         return jsonify({"error": "Authentication required"}), 401
     return None
 
 
 def _auth_guard_page():
+    """
+    Return a redirect to the login page when the session is missing, else None.
+    Used by page-serving (GET HTML) endpoints.
+    """
     if not session.get("user_id"):
         return redirect(url_for("banking.login_page"))
     return None
 
 
+# ---------------------------------------------------------------------------
+# Root
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.route("/")
 def index():
     return redirect(url_for("banking.login_page"))
+
+
+# ---------------------------------------------------------------------------
+# Login
+# ---------------------------------------------------------------------------
 
 
 @banking_bp.route("/login", methods=["GET"])
@@ -100,6 +141,11 @@ def login_action():
     return jsonify({"message": "Login successful"}), 200
 
 
+# ---------------------------------------------------------------------------
+# Logout
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.route("/logout")
 def logout():
     username = session.get("username", "unknown")
@@ -108,12 +154,22 @@ def logout():
     return redirect(url_for("banking.login_page"))
 
 
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.route("/dashboard")
 def dashboard_page():
     guard = _auth_guard_page()
     if guard:
         return guard
     return send_from_directory(_frontend(), "dashboard.html")
+
+
+# ---------------------------------------------------------------------------
+# Balance (JSON API)
+# ---------------------------------------------------------------------------
 
 
 @banking_bp.route("/balance")
@@ -127,6 +183,11 @@ def balance():
         return jsonify({"error": result.error}), 404
 
     return jsonify({"balance": result.balance, "username": session.get("username", "")}), 200
+
+
+# ---------------------------------------------------------------------------
+# Deposit
+# ---------------------------------------------------------------------------
 
 
 @banking_bp.route("/deposit", methods=["GET"])
@@ -153,6 +214,11 @@ def deposit():
     return jsonify({"balance": result.balance}), 200
 
 
+# ---------------------------------------------------------------------------
+# Withdraw
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.route("/withdraw", methods=["GET"])
 def withdraw_page():
     guard = _auth_guard_page()
@@ -170,23 +236,6 @@ def withdraw():
     data = request.get_json(silent=True) or {}
     amount = data.get("amount")
 
-    # Validation check 1: amount field must not be empty
-    if amount is None or str(amount).strip() == "":
-        return jsonify({"error": "Amount is required"}), 400
-
-    # Validation check 2: amount must be a positive number
-    try:
-        amount_float = float(amount)
-    except (TypeError, ValueError):
-        amount_float = None
-    if amount_float is None or amount_float <= 0:
-        return jsonify({"error": "Amount must be greater than zero"}), 400
-
-    # Validation check 3: amount must not exceed the current balance
-    balance_result = fetch_balance(_db(), session["user_id"])  # type: ignore[arg-type]
-    if balance_result.ok and amount_float > balance_result.balance:
-        return jsonify({"error": "Insufficient funds"}), 422
-
     result = process_withdrawal(_db(), session["user_id"], amount)  # type: ignore[arg-type]
     if not result.ok:
         status = 422 if result.error == "Insufficient balance" else 400
@@ -195,13 +244,24 @@ def withdraw():
     return jsonify({"balance": result.balance}), 200
 
 
+# ---------------------------------------------------------------------------
+# Static assets from FRONTEND/static/
+# ---------------------------------------------------------------------------
+
+
 @banking_bp.route("/static/<path:filename>")
 def static_files(filename: str):
     static_dir = os.path.join(_frontend(), "static")
     return send_from_directory(static_dir, filename)
 
 
+# ---------------------------------------------------------------------------
+# Error handlers (registered on the app, not the blueprint)
+# ---------------------------------------------------------------------------
+
+
 def _add_security_headers(response):
+    """Add the same defensive headers to error responses as to normal responses."""
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -220,6 +280,13 @@ def _add_security_headers(response):
 
 
 def register_error_handlers(app: Flask) -> None:
+    """
+    Register JSON-returning error handlers for the four most common HTTP
+    error codes.  Returns consistent ``{"error": "..."}`` payloads.
+    Security headers are added to every error response via
+    ``_add_security_headers``.
+    """
+
     @app.errorhandler(400)
     def bad_request(exc):
         logger.warning("400 Bad Request: %s", exc)

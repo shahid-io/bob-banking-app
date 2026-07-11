@@ -2,8 +2,10 @@
 tests/unit/test_services.py
 
 Unit tests for the services layer.
-Service functions return a ``ServiceResult`` dataclass.
-Tests access named attributes: result.ok, result.balance, result.error, etc.
+
+After the refactor, service functions return a ``ServiceResult`` dataclass
+(not a plain dict).  Tests access named attributes: ``result.ok``,
+``result.balance``, ``result.error``, ``result.id``, ``result.name``.
 """
 
 from __future__ import annotations
@@ -14,6 +16,11 @@ import pytest
 
 from models import get_customer_by_username
 from services import ServiceResult, authenticate, fetch_balance, process_deposit, process_withdrawal
+
+
+# ---------------------------------------------------------------------------
+# authenticate
+# ---------------------------------------------------------------------------
 
 
 class TestAuthenticate:
@@ -30,9 +37,11 @@ class TestAuthenticate:
         assert result.error is not None
 
     def test_unknown_username_returns_failure(self, db_path):
-        assert not authenticate(db_path, "nobody", "password123").ok
+        result = authenticate(db_path, "nobody", "password123")
+        assert result.ok is False
 
     def test_error_message_is_generic(self, db_path):
+        """Both wrong username and wrong password produce the same message."""
         r1 = authenticate(db_path, "nobody", "x")
         r2 = authenticate(db_path, "alice", "wrong")
         assert r1.error == r2.error
@@ -42,6 +51,11 @@ class TestAuthenticate:
 
     def test_empty_password_returns_failure(self, db_path):
         assert not authenticate(db_path, "alice", "").ok
+
+
+# ---------------------------------------------------------------------------
+# fetch_balance
+# ---------------------------------------------------------------------------
 
 
 class TestFetchBalance:
@@ -54,6 +68,12 @@ class TestFetchBalance:
     def test_unknown_id_returns_failure(self, db_path):
         result = fetch_balance(db_path, 99999)
         assert result.ok is False
+        assert result.error is not None
+
+
+# ---------------------------------------------------------------------------
+# process_deposit
+# ---------------------------------------------------------------------------
 
 
 class TestProcessDeposit:
@@ -68,27 +88,39 @@ class TestProcessDeposit:
     def test_balance_reflects_deposit_amount_exactly(self, db_path):
         cid = self._cid(db_path)
         process_deposit(db_path, cid, 100)
-        assert process_deposit(db_path, cid, 50).balance == 1150.00
+        result = process_deposit(db_path, cid, 50)
+        assert result.balance == 1150.00
 
     def test_zero_amount_rejected(self, db_path):
-        assert not process_deposit(db_path, self._cid(db_path), 0).ok
+        result = process_deposit(db_path, self._cid(db_path), 0)
+        assert result.ok is False
 
     def test_negative_amount_rejected(self, db_path):
-        assert not process_deposit(db_path, self._cid(db_path), -100).ok
+        result = process_deposit(db_path, self._cid(db_path), -100)
+        assert result.ok is False
 
     def test_non_numeric_string_rejected(self, db_path):
-        assert not process_deposit(db_path, self._cid(db_path), "abc").ok
+        result = process_deposit(db_path, self._cid(db_path), "abc")
+        assert result.ok is False
 
     def test_infinity_rejected(self, db_path):
-        assert not process_deposit(db_path, self._cid(db_path), math.inf).ok
+        result = process_deposit(db_path, self._cid(db_path), math.inf)
+        assert result.ok is False
 
     def test_nan_rejected(self, db_path):
-        assert not process_deposit(db_path, self._cid(db_path), math.nan).ok
+        result = process_deposit(db_path, self._cid(db_path), math.nan)
+        assert result.ok is False
 
     def test_float_string_accepted(self, db_path):
+        """A numeric string like '50.00' should be accepted (coerced to float)."""
         result = process_deposit(db_path, self._cid(db_path), "50.00")
         assert result.ok is True
         assert result.balance == 1050.00
+
+
+# ---------------------------------------------------------------------------
+# process_withdrawal
+# ---------------------------------------------------------------------------
 
 
 class TestProcessWithdrawal:

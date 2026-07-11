@@ -64,11 +64,13 @@ def init_db(db_path: str) -> None:
 
     Args:
         db_path: Filesystem path to the SQLite database file.
+                 Use ``:memory:`` for in-process testing only.
     """
     logger.debug("init_db: path=%s", db_path)
     conn = _connect(db_path)
     try:
         conn.execute(_DDL)
+        # Index on username speeds up the login lookup
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_customers_username "
             "ON customers (username)"
