@@ -170,6 +170,23 @@ def withdraw():
     data = request.get_json(silent=True) or {}
     amount = data.get("amount")
 
+    # Validation check 1: amount field must not be empty
+    if amount is None or str(amount).strip() == "":
+        return jsonify({"error": "Amount is required"}), 400
+
+    # Validation check 2: amount must be a positive number
+    try:
+        amount_float = float(amount)
+    except (TypeError, ValueError):
+        amount_float = None
+    if amount_float is None or amount_float <= 0:
+        return jsonify({"error": "Amount must be greater than zero"}), 400
+
+    # Validation check 3: amount must not exceed the current balance
+    balance_result = fetch_balance(_db(), session["user_id"])  # type: ignore[arg-type]
+    if balance_result.ok and amount_float > balance_result.balance:
+        return jsonify({"error": "Insufficient funds"}), 422
+
     result = process_withdrawal(_db(), session["user_id"], amount)  # type: ignore[arg-type]
     if not result.ok:
         status = 422 if result.error == "Insufficient balance" else 400

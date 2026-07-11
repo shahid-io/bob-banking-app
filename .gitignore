@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment variables — never commit secrets
+.env
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bob IDE
+.bob/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
