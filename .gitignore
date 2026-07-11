@@ -22,7 +22,13 @@ env/
 # pytest / coverage
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+
+# Linters / type checkers
+.ruff_cache/
+.mypy_cache/
 
 # Bob IDE
 .bob/
@@ -31,6 +37,11 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Editors
+.vscode/
+.idea/
+*.swp
 
 # OS artefacts
 .DS_Store
