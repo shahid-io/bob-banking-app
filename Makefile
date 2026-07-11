@@ -29,37 +29,33 @@ install:
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip --quiet
 	$(PIP) install -r BACKEND/requirements.txt --quiet
-	@echo "\n  Virtual environment ready at $(VENV)"
+	@echo "\n✓  Virtual environment ready at $(VENV)"
 	@echo "   Activate with: source $(VENV)/bin/activate"
 
 ## run: Start the Flask development server (http://127.0.0.1:5000)
 run:
-	cd BACKEND && source venv/bin/activate && $(PYTHON) app.py
+	cd BACKEND && $(PYTHON) app.py
 
 ## test: Run the full pytest suite
 test:
-	cd BACKEND && source venv/bin/activate && \
-	    $(PYTEST) ../tests/ -v
+	$(PYTEST) tests/ -v
 
 ## coverage: Run tests and print a coverage report
 coverage:
-	cd BACKEND && source venv/bin/activate && \
-	    $(PYTEST) ../tests/ -v \
-	        --cov=. \
-	        --cov-config=../.coveragerc \
-	        --cov-report=term-missing \
-	        --cov-report=html:../htmlcov
+	$(PYTEST) tests/ -v \
+	    --cov=BACKEND \
+	    --cov-config=.coveragerc \
+	    --cov-report=term-missing \
+	    --cov-report=html:htmlcov
 
 ## lint: Check code style with ruff
 lint:
-	cd BACKEND && source venv/bin/activate && \
-	    $(RUFF) check $(SRC)
+	$(RUFF) check $(SRC)
 
 ## format: Auto-format with ruff (isort + pyupgrade) then black
 format:
-	cd BACKEND && source venv/bin/activate && \
-	    $(RUFF) check --fix $(SRC) && \
-	    $(BLACK) $(SRC)
+	$(RUFF) check --fix $(SRC) && \
+	$(BLACK) $(SRC)
 
 ## clean: Remove Python caches, coverage artifacts, and the test database
 clean:
@@ -67,7 +63,7 @@ clean:
 	find . -name "*.pyc" -delete 2>/dev/null; true
 	find . -name ".coverage" -delete 2>/dev/null; true
 	rm -rf htmlcov .pytest_cache BACKEND/banking.db
-	@echo "  Clean"
+	@echo "✓  Clean"
 
 ## help: Print this help message
 help:
