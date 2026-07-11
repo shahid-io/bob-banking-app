@@ -139,8 +139,11 @@ bob-banking-app/
 ├── pyproject.toml                   # Build metadata + pytest + coverage config
 ├── ruff.toml                        # Linter + formatter configuration
 ├── Makefile                         # Developer convenience targets
-├── IMPLEMENTATION_PLAN.md           # Architecture and planning document
-├── STEP_BY_STEP_IMPLEMENTATION_GUIDE.md
+├── docs/
+│   ├── IMPLEMENTATION_PLAN.md       # Architecture and planning document
+│   ├── STEP_BY_STEP_IMPLEMENTATION_GUIDE.md
+│   ├── banking-app-build-plan.md    # Build plan
+│   └── demo-setup/                  # Hands-on lab / MCP demo material
 └── README.md
 ```
 
