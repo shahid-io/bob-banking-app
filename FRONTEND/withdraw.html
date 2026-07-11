@@ -12,6 +12,7 @@
 </head>
 <body class="bg-light">
 
+  <!-- Navigation bar -->
   <nav class="navbar navbar-expand-md navbar-dark bg-primary">
     <div class="container">
       <a class="navbar-brand fw-bold" href="/dashboard">&#127963; SecureBank</a>
@@ -21,10 +22,12 @@
     </div>
   </nav>
 
+  <!-- Main content -->
   <div class="container mt-5">
     <div class="row justify-content-center">
       <div class="col-12 col-sm-8 col-md-5">
 
+        <!-- Back link -->
         <a href="/dashboard" class="text-decoration-none text-muted small mb-3 d-inline-block">
           &larr; Back to Dashboard
         </a>
@@ -35,26 +38,38 @@
             <h2 class="h5 fw-semibold mb-1">Withdraw Funds</h2>
             <p class="text-muted small mb-4">Take money from your account</p>
 
+            <!-- Current balance display -->
             <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-light rounded">
               <span class="text-muted small">Available balance</span>
               <span id="current-balance" class="fw-bold text-primary">Loading…</span>
             </div>
 
+            <!-- Feedback areas -->
             <div id="error-alert"   class="alert alert-danger  d-none" role="alert"></div>
             <div id="success-alert" class="alert alert-success d-none" role="alert"></div>
 
             <form id="withdraw-form" novalidate>
+
               <div class="mb-4">
                 <label for="amount" class="form-label">Amount (USD)</label>
                 <div class="input-group">
                   <span class="input-group-text">$</span>
-                  <input type="number" id="amount" name="amount" class="form-control"
-                         placeholder="0.00" min="0.01" step="0.01" required />
+                  <input type="number"
+                         id="amount"
+                         name="amount"
+                         class="form-control"
+                         placeholder="0.00"
+                         min="0.01"
+                         step="0.01"
+                         required />
                 </div>
                 <div class="invalid-feedback">Please enter a valid positive amount.</div>
               </div>
 
-              <button type="submit" id="withdraw-btn" class="btn btn-warning w-100 text-dark fw-semibold">Withdraw</button>
+              <button type="submit" id="withdraw-btn" class="btn btn-warning w-100 text-dark fw-semibold">
+                Withdraw
+              </button>
+
             </form>
 
           </div>
@@ -75,14 +90,38 @@
       return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
     }
 
+    function showError(msg) {
+      successAlert.classList.add('d-none');
+      errorAlert.textContent = msg;
+      errorAlert.classList.remove('d-none');
+    }
+
+    function showSuccess(balance) {
+      errorAlert.classList.add('d-none');
+      successAlert.innerHTML = '&#10003; Withdrawal successful! Your new balance is <strong>' + fmt(balance) + '</strong>.';
+      successAlert.classList.remove('d-none');
+      balanceEl.textContent = fmt(balance);
+    }
+
+    // Load and display the current balance on page load
     async function loadBalance() {
       try {
         const res = await fetch('/balance');
-        if (res.status === 401 || res.redirected) { window.location.href = '/login'; return; }
+        if (res.status === 401 || res.redirected) {
+          window.location.href = '/login';
+          return;
+        }
         const data = await res.json();
-        balanceEl.textContent = res.ok ? fmt(data.balance) : 'Unavailable';
-      } catch { balanceEl.textContent = 'Unavailable'; }
+        if (res.ok) {
+          balanceEl.textContent = fmt(data.balance);
+        } else {
+          balanceEl.textContent = 'Unavailable';
+        }
+      } catch (err) {
+        balanceEl.textContent = 'Unavailable';
+      }
     }
+
     loadBalance();
 
     form.addEventListener('submit', async (e) => {
@@ -93,6 +132,7 @@
       const amountVal = document.getElementById('amount').value;
       const amount    = parseFloat(amountVal);
 
+      // Client-side validation
       if (!amountVal || isNaN(amount) || amount <= 0) {
         form.classList.add('was-validated');
         return;
@@ -102,28 +142,28 @@
       withdrawBtn.textContent = 'Processing…';
 
       try {
-        const res = await fetch('/withdraw', {
+        const res  = await fetch('/withdraw', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ amount }),
         });
 
-        if (res.status === 401 || res.redirected) { window.location.href = '/login'; return; }
+        if (res.status === 401 || res.redirected) {
+          window.location.href = '/login';
+          return;
+        }
 
         const data = await res.json();
+
         if (res.ok) {
-          successAlert.innerHTML = '&#10003; Withdrawal successful! Your new balance is <strong>' + fmt(data.balance) + '</strong>.';
-          successAlert.classList.remove('d-none');
-          balanceEl.textContent = fmt(data.balance);
+          showSuccess(data.balance);
           form.reset();
           form.classList.remove('was-validated');
         } else {
-          errorAlert.textContent = data.error || 'Withdrawal failed. Please try again.';
-          errorAlert.classList.remove('d-none');
+          showError(data.error || 'Withdrawal failed. Please try again.');
         }
       } catch (err) {
-        errorAlert.textContent = 'Unable to reach the server. Please try again.';
-        errorAlert.classList.remove('d-none');
+        showError('Unable to reach the server. Please try again.');
       } finally {
         withdrawBtn.disabled    = false;
         withdrawBtn.textContent = 'Withdraw';

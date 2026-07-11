@@ -1,17 +1,40 @@
 /* styles.css — Custom overrides on top of Bootstrap 5 CDN */
 
-.card { border-radius: 12px; }
+/* Increase card border radius for a softer look */
+.card {
+  border-radius: 12px;
+}
 
-#balance-display { color: #1a56db; letter-spacing: -1px; }
+/* Primary accent colour for the balance display */
+#balance-display {
+  color: #1a56db;
+  letter-spacing: -1px;
+}
 
-.letter-spacing-1 { letter-spacing: 0.08em; }
+/* Small letter-spacing utility for balance label */
+.letter-spacing-1 {
+  letter-spacing: 0.08em;
+}
 
-.navbar-brand { font-size: 1.1rem; }
+/* Nav brand */
+.navbar-brand {
+  font-size: 1.1rem;
+}
 
-.btn-success, .btn-warning { border-radius: 10px; font-size: 0.95rem; }
+/* Deposit / Withdraw action buttons on dashboard */
+.btn-success,
+.btn-warning {
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
 
-.bank-logo { font-size: 2.5rem; line-height: 1; }
+/* Login bank logo icon */
+.bank-logo {
+  font-size: 2.5rem;
+  line-height: 1;
+}
 
+/* Input group focus ring */
 .input-group .form-control:focus {
   box-shadow: 0 0 0 0.2rem rgba(26, 86, 219, 0.2);
   border-color: #1a56db;
